@@ -73,6 +73,7 @@ impl PieceTable {
         // deletes char at beggining of piece
         if index_in_piece == 0 {
             piece.start += 1;
+            piece.length -= 1;
         }
 
         // deletes char at end of piece
@@ -84,6 +85,7 @@ impl PieceTable {
         self.divide_piece(piece_index, index_in_piece);
 
         self.pieces[piece_index + 1].start += 1;
+        self.pieces[piece_index + 1].length -= 1;
 
     }
 
@@ -176,5 +178,18 @@ mod tests {
         assert_eq!(" Matias", pt.append_buf);
         assert_eq!(3, pt.pieces.len());
         assert_eq!(BufChoice::AppendOnly, pt.pieces[1].buffer);
+
+        assert_eq!("Buenos dias Matias, el clima se ve muy bien", pt.display_result());
+    }
+
+    #[test]
+    fn test_delete_func() {
+        let initial_buffer = "Buenos dias, el clima se ve muy bien";
+        let mut pt = PieceTable::new(initial_buffer);
+
+        pt.delete(11);
+
+        assert_eq!(2, pt.pieces.len());
+        assert_eq!("Buenos dias el clima se ve muy bien", pt.display_result());
     }
 }
