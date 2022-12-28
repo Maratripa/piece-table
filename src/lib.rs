@@ -1,4 +1,4 @@
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum BufChoice {
     ReadOnly,
     AppendOnly
@@ -19,7 +19,7 @@ pub struct PieceTable {
 }
 
 impl PieceTable {
-    fn new(read_buf: &str) -> PieceTable {
+    pub fn new(read_buf: &str) -> PieceTable {
         let buf = read_buf.to_string();
         let size = buf.len();
 
@@ -35,11 +35,23 @@ impl PieceTable {
         }
     }
     
-    pub fn insert(&mut self, buf: &str) {
-        let append_start = self.append_buf.len();
+    /// Insert string slice in piece table. split_index is the global
+    /// index for the starting character or the new string slice.
+    pub fn insert(&mut self, buf: &str, split_index: usize) {
+        let start = self.append_buf.len();
         let length = buf.len();
 
-        // Position on read_only buffer
+        // Split piece table and get index to insert
+        let insert_index = self.split_read_only_table(split_index);
+
+        self.pieces.insert(insert_index, Piece {
+            buffer: BufChoice::AppendOnly,
+            start,
+            length
+        });
+
+        // Add characters to append buffer
+        self.append_buf.push_str(buf);
     }
 
     pub fn delete(&mut self) {
@@ -72,7 +84,7 @@ impl PieceTable {
         for (i, piece) in self.pieces.iter().enumerate() {
             if split_index < counter + piece.length {
                 piece_index = i;
-                split_length = counter + piece.length - split_index;
+                split_length = split_index - counter;
                 break;
             }
 
@@ -110,5 +122,18 @@ mod tests {
 
         assert_eq!(1, i);
         assert_eq!(2, pt.pieces.len());
+        assert_eq!(11, pt.pieces[1].start);
+    }
+
+    #[test]
+    fn test_insert_middle() {
+        let initial_buffer = "Buenos dias, el clima se ve muy bien";
+        let mut pt = PieceTable::new(initial_buffer);
+
+        pt.insert(" Matias", 11);
+
+        assert_eq!(" Matias", pt.append_buf);
+        assert_eq!(3, pt.pieces.len());
+        assert_eq!(BufChoice::AppendOnly, pt.pieces[1].buffer);
     }
 }
