@@ -1,9 +1,13 @@
 [package]
 name = "piecetable"
 version = "0.1.0"
+authors = ["Martin Atria Paublo <maratripa@gmail.com>"]
+description = "Simple piece table lib"
 edition = "2021"
 license = "MIT"
-description = "Simple piece table lib"
+homepage = "https://github.com/Maratripa/piece-table"
+repository = "https://github.com/Maratripa/piece-table"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
