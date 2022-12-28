@@ -54,7 +54,39 @@ impl PieceTable {
         self.append_buf.push_str(buf);
     }
 
-    pub fn delete(&mut self) {
+    pub fn delete(&mut self, char_index: usize) {
+        let mut counter: usize = 0;
+        let mut piece_index = 0;
+        let mut index_in_piece = 0;
+
+        for (i, piece) in self.pieces.iter().enumerate() {
+            if char_index < counter + piece.length {
+                piece_index = i;
+                index_in_piece = char_index - counter;
+                break;
+            }
+
+            counter += piece.length;
+        }
+
+        let mut piece = &mut self.pieces[piece_index];
+        
+        // deletes char at beggining of piece
+        if index_in_piece == 0 {
+            piece.start += 1;
+        }
+
+        // deletes char at end of piece
+        if index_in_piece == piece.length - 1 {
+            piece.length -= 1;
+        }
+
+        // deletes char in the middle of piece
+        let split_length: usize = index_in_piece + 1;
+
+        self.divide_piece(piece_index, split_length);
+
+        self.pieces[piece_index + 1].start += 1;
 
     }
 
@@ -68,12 +100,7 @@ impl PieceTable {
             return 0
         }
 
-        let total_length: usize = self.pieces
-            .iter()
-            .map(|x| x.length)
-            .sum();
-
-        if split_index >= total_length {
+        if split_index >= self.total_length() {
             return self.pieces.len()
         }
 
@@ -91,6 +118,12 @@ impl PieceTable {
             counter += piece.length;
         }
 
+        self.divide_piece(piece_index, split_length);
+
+        piece_index + 1
+    }
+
+    fn divide_piece(&mut self, piece_index: usize, split_length: usize) {
         let piece = self.pieces.remove(piece_index);
 
         self.pieces.insert(piece_index, Piece {
@@ -103,8 +136,13 @@ impl PieceTable {
             start: split_length,
             length: piece.length - split_length
         });
+    }
 
-        piece_index + 1
+    fn total_length(&self) -> usize {
+        self.pieces
+            .iter()
+            .map(|x| x.length)
+            .sum()
     }
 }
 
