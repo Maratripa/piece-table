@@ -55,19 +55,7 @@ impl PieceTable {
     }
 
     pub fn delete(&mut self, char_index: usize) {
-        let mut counter: usize = 0;
-        let mut piece_index = 0;
-        let mut index_in_piece = 0;
-
-        for (i, piece) in self.pieces.iter().enumerate() {
-            if char_index < counter + piece.length {
-                piece_index = i;
-                index_in_piece = char_index - counter;
-                break;
-            }
-
-            counter += piece.length;
-        }
+        let (piece_index, index_in_piece) = self.piece_index_split_length(char_index);
 
         let mut piece = &mut self.pieces[piece_index];
         
@@ -82,9 +70,7 @@ impl PieceTable {
         }
 
         // deletes char in the middle of piece
-        let split_length: usize = index_in_piece + 1;
-
-        self.divide_piece(piece_index, split_length);
+        self.divide_piece(piece_index, index_in_piece);
 
         self.pieces[piece_index + 1].start += 1;
 
@@ -104,23 +90,29 @@ impl PieceTable {
             return self.pieces.len()
         }
 
+        let (piece_index, split_length) = self.piece_index_split_length(split_index);
+
+        self.divide_piece(piece_index, split_length);
+
+        piece_index + 1
+    }
+
+    fn piece_index_split_length(&self, split_index: usize) -> (usize, usize) {
         let mut counter: usize = 0;
-        let mut piece_index = 0;
-        let mut split_length: usize = 0;
 
         for (i, piece) in self.pieces.iter().enumerate() {
             if split_index < counter + piece.length {
-                piece_index = i;
-                split_length = split_index - counter;
-                break;
+                return (i, split_index - counter)
             }
 
             counter += piece.length;
         }
 
-        self.divide_piece(piece_index, split_length);
-
-        piece_index + 1
+        (self.pieces.len() - 1,
+        match self.pieces.last() {
+            Some(x) => x.length - 1,
+            None => 0
+        })
     }
 
     fn divide_piece(&mut self, piece_index: usize, split_length: usize) {
