@@ -37,9 +37,10 @@ impl PieceTable {
         let mut result = String::new();
 
         for piece in self.pieces.iter() {
+            let range = piece.start..piece.start+piece.length;
             match piece.buffer {
-                BufChoice::ReadOnly => result.push_str(&self.read_buf[piece.start..piece.start+piece.length]),
-                BufChoice::AppendOnly => result.push_str(&self.append_buf[piece.start..piece.start+piece.length])
+                BufChoice::ReadOnly => result.push_str(&self.read_buf[range]),
+                BufChoice::AppendOnly => result.push_str(&self.append_buf[range])
             }
         }
 
