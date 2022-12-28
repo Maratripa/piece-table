@@ -13,7 +13,6 @@ struct Piece {
 
 pub struct PieceTable {
     read_buf: String,
-    buf_size: usize,
     append_buf: String,
     pieces: Vec<Piece> // TODO: Change to VecDeque
 }
@@ -25,7 +24,6 @@ impl PieceTable {
 
         PieceTable { 
             read_buf: buf,
-            buf_size: size,
             append_buf: String::new(),
             pieces: vec![Piece {
                 buffer: BufChoice::ReadOnly, 
@@ -33,6 +31,19 @@ impl PieceTable {
                 length: size
             }]
         }
+    }
+
+    pub fn display_result(&self) -> String {
+        let mut result = String::new();
+
+        for piece in self.pieces.iter() {
+            match piece.buffer {
+                BufChoice::ReadOnly => result.push_str(&self.read_buf[piece.start..piece.start+piece.length]),
+                BufChoice::AppendOnly => result.push_str(&self.append_buf[piece.start..piece.start+piece.length])
+            }
+        }
+
+        result
     }
     
     /// Insert string slice in piece table. split_index is the global
