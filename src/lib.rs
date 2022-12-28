@@ -1,7 +1,14 @@
+use std::{io, fs};
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum BufChoice {
     ReadOnly,
     AppendOnly
+}
+
+enum ReadBuffer {
+    Str(String),
+    File(String)
 }
 
 #[derive(Debug)]
@@ -12,34 +19,63 @@ struct Piece {
 }
 
 pub struct PieceTable {
-    read_buf: String,
+    read_buf: ReadBuffer,
     append_buf: String,
-    pieces: Vec<Piece> // TODO: Change to VecDeque
+    pieces: Vec<Piece>, // TODO: Change to VecDeque
 }
 
 impl PieceTable {
-    pub fn new(read_buf: &str) -> PieceTable {
-        let buf = read_buf.to_string();
-        let size = buf.len();
+    pub fn from_file(path: &str) -> Result<PieceTable, io::Error> {
+        let file = fs::File::open(path)?;
+        let file_size = file.metadata()?.len();
 
-        PieceTable { 
-            read_buf: buf,
-            append_buf: String::new(),
+        Ok(PieceTable { 
+            read_buf: ReadBuffer::File(path.to_string()), 
+            append_buf: String::new(), 
             pieces: vec![Piece {
-                buffer: BufChoice::ReadOnly, 
-                start: 0, 
-                length: size
+                buffer: BufChoice::ReadOnly,
+                start: 0,
+                length: file_size as usize
             }]
+        })
+    }
+
+    pub fn from_str(buf: &str) -> Result<PieceTable, String> {
+        let buf = buf.to_string();
+        let buf_size = buf.len();
+
+
+        Ok(PieceTable { 
+            read_buf: ReadBuffer::Str(buf), 
+            append_buf: String::new(), 
+            pieces: vec![Piece {
+                buffer: BufChoice::ReadOnly,
+                start: 0,
+                length: buf_size
+            }] 
+        })
+    }
+
+    pub fn display_result(&self) -> Result<String, io::Error> {
+        match &self.read_buf {
+            ReadBuffer::Str(buf) => {
+                Ok(self.connect_pieces(buf))
+            },
+            ReadBuffer::File(path) => {
+                let read_buf = fs::read_to_string(path)?;
+                Ok(self.connect_pieces(&read_buf))
+            }
         }
     }
 
-    pub fn display_result(&self) -> String {
+    fn connect_pieces(&self, read_buf: &String) -> String {
         let mut result = String::new();
 
         for piece in self.pieces.iter() {
-            let range = piece.start..piece.start+piece.length;
+            let range = piece.start .. piece.start + piece.length;
+
             match piece.buffer {
-                BufChoice::ReadOnly => result.push_str(&self.read_buf[range]),
+                BufChoice::ReadOnly => result.push_str(&read_buf[range]),
                 BufChoice::AppendOnly => result.push_str(&self.append_buf[range])
             }
         }
@@ -160,7 +196,7 @@ mod tests {
     #[test]
     fn test_split_table_without_append() {
         let initial_buffer = "Buenos dias, el clima se ve muy bien";
-        let mut pt = PieceTable::new(initial_buffer);
+        let mut pt = PieceTable::from_str(initial_buffer).unwrap();
 
         let i = pt.split_read_only_table(11);
 
@@ -172,7 +208,7 @@ mod tests {
     #[test]
     fn test_insert_middle() {
         let initial_buffer = "Buenos dias, el clima se ve muy bien";
-        let mut pt = PieceTable::new(initial_buffer);
+        let mut pt = PieceTable::from_str(initial_buffer).unwrap();
 
         pt.insert(" Matias", 11);
 
@@ -180,17 +216,17 @@ mod tests {
         assert_eq!(3, pt.pieces.len());
         assert_eq!(BufChoice::AppendOnly, pt.pieces[1].buffer);
 
-        assert_eq!("Buenos dias Matias, el clima se ve muy bien", pt.display_result());
+        assert_eq!("Buenos dias Matias, el clima se ve muy bien", pt.display_result().unwrap());
     }
 
     #[test]
     fn test_delete_func() {
         let initial_buffer = "Buenos dias, el clima se ve muy bien";
-        let mut pt = PieceTable::new(initial_buffer);
+        let mut pt = PieceTable::from_str(initial_buffer).unwrap();
 
         pt.delete(11);
 
         assert_eq!(2, pt.pieces.len());
-        assert_eq!("Buenos dias el clima se ve muy bien", pt.display_result());
+        assert_eq!("Buenos dias el clima se ve muy bien", pt.display_result().unwrap());
     }
 }
