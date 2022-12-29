@@ -2,7 +2,7 @@
 //! 
 //! A piece table data structure implementation.
 
-use std::{io, fs};
+use std::{io::{self, BufReader, Read, Write}, fs::{self, File}};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum BufChoice {
@@ -37,7 +37,7 @@ impl PieceTable {
     /// 
     /// Possible error when reading metadata of file.
     pub fn from_file(path: &str) -> Result<PieceTable, io::Error> {
-        let file = fs::File::open(path)?;
+        let file = File::open(path)?;
         let file_size = file.metadata()?.len();
 
         Ok(PieceTable { 
@@ -234,10 +234,78 @@ impl PieceTable {
             .map(|x| x.length)
             .sum()
     }
+
+    pub fn save_file(&mut self) -> Result<usize, &str> {
+        if let ReadBuffer::File(path) = &self.read_buf {
+            let input = match File::open(path) {
+                Ok(x) => x,
+                Err(_e) => return Err("Could not open file")
+            };
+
+            let mut reader = BufReader::new(input);
+    
+            let mut read_buffer = String::new();
+            
+            let _len = match reader.read_to_string(&mut read_buffer) {
+                Ok(x) => x,
+                Err(_e) => return Err("Could not read file")
+            };
+
+            match self.save(path, &read_buffer) {
+                Ok(len) => {
+                    self.pieces = vec![Piece {
+                        buffer: BufChoice::ReadOnly,
+                        start: 0,
+                        length: len
+                    }];
+                    Ok(len)
+                },
+                Err(_e) => Err("Error saving file")
+            }
+        } else {
+            Err("PieceTable does not contain a filename. Run PieceTable::save_to_file(path) to save to a file.")
+        }
+    }
+
+    pub fn save_to_file(&mut self, path: &str) -> Result<usize, io::Error> {
+        let mut _len = 0;
+        match &self.read_buf {
+            ReadBuffer::Str(buf) => {
+                _len = self.save(path, buf)?;
+            },
+            ReadBuffer::File(saved_path) => {
+                let input = File::open(saved_path)?;
+    
+                let mut reader = BufReader::new(input);
+        
+                let mut read_buffer = String::new();
+                
+                let _read_len = reader.read_to_string(&mut read_buffer)?;
+    
+                _len = self.save(path, &read_buffer)?;
+                
+            }
+        }
+        
+        self.read_buf = ReadBuffer::File(path.to_string());
+        self.pieces = vec![Piece {
+            buffer: BufChoice::ReadOnly,
+            start: 0,
+            length: _len
+        }];
+
+        Ok(_len)
+    }
+
+    fn save(&self, path: &str, read_buffer: &String) -> Result<usize, io::Error> {
+        let mut file = File::create(path)?;
+        write!(file, "{}", self.connect_pieces(&read_buffer))?;
+
+        Ok(file.metadata()?.len() as usize)
+    }
 }
 
 
-#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -276,5 +344,14 @@ mod tests {
 
         assert_eq!(2, pt.pieces.len());
         assert_eq!("Buenos dias el clima se ve muy bien", pt.display_result().unwrap());
+    }
+
+    #[test]
+    fn test_file() {
+        let mut pt = PieceTable::from_file("test.txt").unwrap();
+
+        pt.insert(" Matias", 11);
+
+        pt.save_file().unwrap();
     }
 }
