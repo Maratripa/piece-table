@@ -1,3 +1,7 @@
+//! # PieceTable
+//! 
+//! A piece table data structure implementation.
+
 use std::{io, fs};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -25,6 +29,13 @@ pub struct PieceTable {
 }
 
 impl PieceTable {
+    /// Create new PieceTable using a file as read_buffer.
+    /// 
+    /// # Errors
+    /// 
+    /// Possible error when opening file.
+    /// 
+    /// Possible error when reading metadata of file.
     pub fn from_file(path: &str) -> Result<PieceTable, io::Error> {
         let file = fs::File::open(path)?;
         let file_size = file.metadata()?.len();
@@ -40,12 +51,13 @@ impl PieceTable {
         })
     }
 
-    pub fn from_str(buf: &str) -> Result<PieceTable, String> {
+    /// Create new PieceTable using a base string as read_buffer.
+    pub fn from_str(buf: &str) -> PieceTable {
         let buf = buf.to_string();
         let buf_size = buf.len();
 
 
-        Ok(PieceTable { 
+        PieceTable { 
             read_buf: ReadBuffer::Str(buf), 
             append_buf: String::new(), 
             pieces: vec![Piece {
@@ -53,9 +65,14 @@ impl PieceTable {
                 start: 0,
                 length: buf_size
             }] 
-        })
+        }
     }
 
+    /// Join pieces reading from read_buffer and append_buffer.
+    /// 
+    /// # Errors
+    /// 
+    /// Posible error when reading file to string.
     pub fn display_result(&self) -> Result<String, io::Error> {
         match &self.read_buf {
             ReadBuffer::Str(buf) => {
@@ -83,8 +100,23 @@ impl PieceTable {
         result
     }
     
-    /// Insert string slice in piece table. split_index is the global
-    /// index for the starting character or the new string slice.
+    /// Insert string slice in piece table. 
+    /// 
+    /// split_index is the global index for the starting character or the new string slice.
+    /// 
+    /// # Examples
+    /// ```
+    /// use piecetable::PieceTable;
+    /// 
+    /// let buffer = "Buenos dias, que buen clima hoy";
+    /// //                       |
+    /// //                      11
+    /// let mut piece_table = PieceTable::from_str(buffer);
+    /// 
+    /// piece_table.insert(" Matias", 11);
+    /// 
+    /// assert_eq!("Buenos dias Matias, que buen clima hoy", piece_table.display_result().unwrap());
+    /// ```
     pub fn insert(&mut self, buf: &str, split_index: usize) {
         let start = self.append_buf.len();
         let length = buf.len();
@@ -101,8 +133,24 @@ impl PieceTable {
         // Add characters to append buffer
         self.append_buf.push_str(buf);
     }
-
-    pub fn delete(&mut self, char_index: usize) {
+    
+    /// Delete character at position _char_index_
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use piecetable::PieceTable;
+    /// 
+    /// let buffer = "Mucho gus8to";
+    /// //                     |
+    /// //                     9
+    /// let mut piece_table = PieceTable::from_str(buffer);
+    /// 
+    /// piece_table.delete_char(9);
+    /// 
+    /// assert_eq!("Mucho gusto", piece_table.display_result().unwrap());
+    /// ```
+    pub fn delete_char(&mut self, char_index: usize) {
         let (piece_index, index_in_piece) = self.piece_index_split_length(char_index);
 
         let mut piece = &mut self.pieces[piece_index];
@@ -196,7 +244,7 @@ mod tests {
     #[test]
     fn test_split_table_without_append() {
         let initial_buffer = "Buenos dias, el clima se ve muy bien";
-        let mut pt = PieceTable::from_str(initial_buffer).unwrap();
+        let mut pt = PieceTable::from_str(initial_buffer);
 
         let i = pt.split_read_only_table(11);
 
@@ -208,7 +256,7 @@ mod tests {
     #[test]
     fn test_insert_middle() {
         let initial_buffer = "Buenos dias, el clima se ve muy bien";
-        let mut pt = PieceTable::from_str(initial_buffer).unwrap();
+        let mut pt = PieceTable::from_str(initial_buffer);
 
         pt.insert(" Matias", 11);
 
@@ -222,9 +270,9 @@ mod tests {
     #[test]
     fn test_delete_func() {
         let initial_buffer = "Buenos dias, el clima se ve muy bien";
-        let mut pt = PieceTable::from_str(initial_buffer).unwrap();
+        let mut pt = PieceTable::from_str(initial_buffer);
 
-        pt.delete(11);
+        pt.delete_char(11);
 
         assert_eq!(2, pt.pieces.len());
         assert_eq!("Buenos dias el clima se ve muy bien", pt.display_result().unwrap());
