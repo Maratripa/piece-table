@@ -2,7 +2,11 @@
 //! 
 //! A piece table data structure implementation.
 
-use std::{io::{self, BufReader, Read, Write}, fs::{self, File}};
+use std::{
+    io::{self, BufReader, Read, Write},
+    fs::{self, File},
+    path::{Path, PathBuf}
+};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum BufChoice {
@@ -12,7 +16,7 @@ enum BufChoice {
 
 enum ReadBuffer {
     Str(String),
-    File(String)
+    File(PathBuf)
 }
 
 #[derive(Debug)]
@@ -36,12 +40,12 @@ impl PieceTable {
     /// Possible error when opening file.
     /// 
     /// Possible error when reading metadata of file.
-    pub fn from_file(path: &str) -> Result<PieceTable, io::Error> {
+    pub fn from_file(path: &Path) -> Result<PieceTable, io::Error> {
         let file = File::open(path)?;
         let file_size = file.metadata()?.len();
 
         Ok(PieceTable { 
-            read_buf: ReadBuffer::File(path.to_string()), 
+            read_buf: ReadBuffer::File(PathBuf::from(path)), 
             append_buf: String::new(), 
             pieces: vec![Piece {
                 buffer: BufChoice::ReadOnly,
@@ -267,7 +271,7 @@ impl PieceTable {
         }
     }
 
-    pub fn save_to_file(&mut self, path: &str) -> Result<usize, io::Error> {
+    pub fn save_to_file(&mut self, path: &Path) -> Result<usize, io::Error> {
         let mut _len = 0;
         match &self.read_buf {
             ReadBuffer::Str(buf) => {
@@ -287,7 +291,7 @@ impl PieceTable {
             }
         }
         
-        self.read_buf = ReadBuffer::File(path.to_string());
+        self.read_buf = ReadBuffer::File(PathBuf::from(path));
         self.pieces = vec![Piece {
             buffer: BufChoice::ReadOnly,
             start: 0,
@@ -297,7 +301,7 @@ impl PieceTable {
         Ok(_len)
     }
 
-    fn save(&self, path: &str, read_buffer: &String) -> Result<usize, io::Error> {
+    fn save(&self, path: &Path, read_buffer: &String) -> Result<usize, io::Error> {
         let mut file = File::create(path)?;
         write!(file, "{}", self.connect_pieces(&read_buffer))?;
 
@@ -348,7 +352,7 @@ mod tests {
 
     #[test]
     fn test_file() {
-        let mut pt = PieceTable::from_file("test.txt").unwrap();
+        let mut pt = PieceTable::from_file(Path::new("test.txt")).unwrap();
 
         pt.insert(" Matias", 11);
 
