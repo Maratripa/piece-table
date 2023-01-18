@@ -35,6 +35,14 @@ pub struct PieceTable {
 impl PieceTable {
     /// Create new PieceTable using a file as read_buffer.
     /// 
+    /// # Examples
+    /// ```
+    /// use piecetable::PieceTable;
+    /// use std::path::Path;
+    /// 
+    /// let mut piecetable = PieceTable::from_file(Path::new("test.txt")).unwrap();
+    /// ```
+    /// 
     /// # Errors
     /// 
     /// Possible error when opening file.
@@ -56,6 +64,13 @@ impl PieceTable {
     }
 
     /// Create new PieceTable using a base string as read_buffer.
+    /// 
+    /// # Examples
+    /// ```
+    /// use piecetable::PieceTable;
+    /// 
+    /// let mut piecetable = PieceTable::from_str("Buenos dias");
+    /// ```
     pub fn from_str(buf: &str) -> PieceTable {
         let buf = buf.to_string();
         let buf_size = buf.len();
@@ -73,6 +88,15 @@ impl PieceTable {
     }
 
     /// Join pieces reading from read_buffer and append_buffer.
+    /// 
+    /// # Examples
+    /// ```
+    /// use piecetable::PieceTable;
+    /// 
+    /// let piecetable = PieceTable::from_str("Buenos dias");
+    /// 
+    /// println!("{}", piecetable.display_result().unwrap());
+    /// ```
     /// 
     /// # Errors
     /// 
@@ -239,6 +263,31 @@ impl PieceTable {
             .sum()
     }
 
+    /// Save piecetable to file
+    /// 
+    /// # Expamples
+    /// ```
+    /// use piecetable::PieceTable;
+    /// use std::{
+    ///     path::Path,
+    ///     fs,
+    ///     io::Write
+    /// };
+    /// 
+    /// {
+    ///     let mut file = fs::File::create("test.txt").unwrap();
+    ///     file.write_all(b"Buenos dias").unwrap();
+    /// }
+    /// 
+    /// let mut piecetable = PieceTable::from_file(Path::new("test.txt")).unwrap();
+    /// piecetable.insert(" Matias", 11);
+    /// 
+    /// let _file_length: usize = piecetable.save_file().unwrap();
+    /// ```
+    /// 
+    /// # Errors
+    /// 
+    /// Returns error if piecetable does not contain a filepath to save the pieces to.
     pub fn save_file(&mut self) -> Result<usize, &str> {
         if let ReadBuffer::File(path) = &self.read_buf {
             let input = match File::open(path) {
@@ -267,10 +316,27 @@ impl PieceTable {
                 Err(_e) => Err("Error saving file")
             }
         } else {
-            Err("PieceTable does not contain a filename. Run PieceTable::save_to_file(path) to save to a file.")
+            Err("PieceTable does not contain a filepath. Run PieceTable::save_to_file(path) to save to a file.")
         }
     }
 
+    /// Save piecetable to new filepath and modify filename of piecetable if it exists.
+    /// 
+    /// # Examples
+    /// ```
+    /// use piecetable::PieceTable;
+    /// use std::path::Path;
+    /// 
+    /// let mut piecetable = PieceTable::from_str("Buenos dias");
+    /// let _new_file_length = piecetable.save_to_file(Path::new("test.txt")).unwrap();
+    /// ```
+    /// 
+    /// # Errors
+    /// 
+    /// Error creating file
+    /// Error opening file
+    /// Error reading file
+    /// Error reading metadata
     pub fn save_to_file(&mut self, path: &Path) -> Result<usize, io::Error> {
         let mut _len = 0;
         match &self.read_buf {
