@@ -29,7 +29,7 @@ struct Piece {
 pub struct PieceTable {
     read_buf: ReadBuffer,
     append_buf: String,
-    pieces: Vec<Piece>, // TODO: Change to VecDeque
+    pieces: Vec<Piece>,
 }
 
 impl PieceTable {
@@ -310,6 +310,7 @@ impl PieceTable {
 }
 
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -352,10 +353,20 @@ mod tests {
 
     #[test]
     fn test_file() {
-        let mut pt = PieceTable::from_file(Path::new("test.txt")).unwrap();
+        {
+            let mut file = fs::File::create("test.txt").unwrap();
+            file.write_all(b"Buenos dias").unwrap();
+        }
+        {
+            let mut pt = PieceTable::from_file(Path::new("test.txt")).unwrap();
 
-        pt.insert(" Matias", 11);
+            pt.insert(" Matias", 11);
 
-        pt.save_file().unwrap();
+            pt.save_file().unwrap();
+        }
+
+        let contents = fs::read_to_string("test.txt").unwrap();
+
+        assert_eq!("Buenos dias Matias", contents);
     }
 }

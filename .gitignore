@@ -1,2 +1,5 @@
 /target
 /Cargo.lock
+
+# Ignore test text files
+*.txt
