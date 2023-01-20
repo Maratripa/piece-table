@@ -184,14 +184,22 @@ impl PieceTable {
         let mut piece = &mut self.pieces[piece_index];
         
         // deletes char at beggining of piece
+        // only case of last remaining char in piece
         if index_in_piece == 0 {
             piece.start += 1;
             piece.length -= 1;
+
+            if piece.length == 0 {
+                self.delete_and_join(piece_index);
+            }
+
+            return
         }
 
         // deletes char at end of piece
         if index_in_piece == piece.length - 1 {
             piece.length -= 1;
+            return
         }
 
         // deletes char in the middle of piece
@@ -254,6 +262,20 @@ impl PieceTable {
             start: split_length,
             length: piece.length - split_length
         });
+    }
+
+    fn delete_and_join(&mut self, piece_index: usize) {
+        self.pieces.remove(piece_index);
+
+        if piece_index == 0 || piece_index == self.pieces.len() - 1 { return }
+
+        let prev = &self.pieces[piece_index - 1];
+        let next = &self.pieces[piece_index];
+
+        if prev.buffer == next.buffer && prev.start + prev.length == next.start {
+            self.pieces[piece_index - 1].length += next.length;
+            self.pieces.remove(piece_index);
+        }
     }
 
     fn total_length(&self) -> usize {
