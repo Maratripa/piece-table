@@ -14,6 +14,7 @@ enum BufChoice {
     AppendOnly,
 }
 
+#[derive(Debug)]
 enum ReadBuffer {
     Str(String),
     File(PathBuf),
@@ -26,6 +27,7 @@ struct Piece {
     length: usize,
 }
 
+#[derive(Debug)]
 pub struct PieceTable {
     read_buf: ReadBuffer,
     append_buf: String,
@@ -142,24 +144,92 @@ impl PieceTable {
     ///
     /// assert_eq!("Buenos dias Matias, que buen clima hoy", piece_table.display_result().unwrap());
     /// ```
-    pub fn insert(&mut self, buf: &str, split_index: usize) {
-        let start = self.append_buf.len();
+    pub fn insert(&mut self, buf: &str, index: usize) {
+        let append_buf_len = self.append_buf.len();
         let length = buf.len();
+        let idx = self.find_piece_at_position(index);
+        let is_border = self.position_is_at_border(index);
 
-        // Split piece table and get index to insert
-        let insert_index = self.split_read_only_table(split_index);
+        // check if insert is at the end of an append piece and is an extension of last added to append buffer
+        if is_border && idx != 0 {
+            let prev_piece = &self.pieces[idx - 1];
+            if prev_piece.buffer == BufChoice::AppendOnly {
+                if prev_piece.start + prev_piece.length == append_buf_len {
+                    self.append_buf.push_str(buf);
+                    self.pieces[idx - 1].length += length;
+                    return;
+                }
+            }
+        };
 
+        // check if it is at a border
+        if is_border {
+            self.pieces.insert(
+                idx,
+                Piece {
+                    buffer: BufChoice::AppendOnly,
+                    start: append_buf_len,
+                    length,
+                },
+            );
+            self.append_buf.push_str(buf);
+            return;
+        }
+
+        // split piece in which is inserted and insert new piece
+        // get split index
+        let mut counter = 0;
+        for i in 0..idx {
+            counter += self.pieces[i].length;
+        }
+        let split_index = index - counter;
+        // divide pieces
+        self.divide_piece(idx, split_index);
         self.pieces.insert(
-            insert_index,
+            idx + 1,
             Piece {
                 buffer: BufChoice::AppendOnly,
-                start,
+                start: append_buf_len,
                 length,
             },
         );
 
         // Add characters to append buffer
         self.append_buf.push_str(buf);
+    }
+
+    fn find_piece_at_position(&self, position: usize) -> usize {
+        if position == 0 {
+            return 0;
+        }
+
+        let mut counter = 0;
+        for (i, piece) in self.pieces.iter().enumerate() {
+            if position < counter + piece.length {
+                return i;
+            }
+
+            counter += piece.length;
+        }
+
+        self.pieces.len()
+    }
+
+    fn position_is_at_border(&self, position: usize) -> bool {
+        if position == 0 {
+            return true;
+        }
+
+        let mut counter = 0;
+        for piece in self.pieces.iter() {
+            if position == piece.length + counter {
+                return true;
+            }
+
+            counter += piece.length;
+        }
+
+        false
     }
 
     /// Delete character at position _char_index_
@@ -209,26 +279,6 @@ impl PieceTable {
         self.pieces[piece_index + 1].length -= 1;
     }
 
-    /// Calls when inserting a str slice into the piece table.
-    ///
-    /// returns the index at which the next piece needs to be
-    /// inserted.
-    fn split_read_only_table(&mut self, split_index: usize) -> usize {
-        if split_index == 0 {
-            return 0;
-        }
-
-        if split_index >= self.total_length() {
-            return self.pieces.len();
-        }
-
-        let (piece_index, split_length) = self.split_piece_index_and_lenght(split_index);
-
-        self.divide_piece(piece_index, split_length);
-
-        piece_index + 1
-    }
-
     fn split_piece_index_and_lenght(&self, split_index: usize) -> (usize, usize) {
         let mut counter: usize = 0;
 
@@ -264,7 +314,7 @@ impl PieceTable {
             piece_index + 1,
             Piece {
                 buffer: piece.buffer,
-                start: split_length,
+                start: piece.start + split_length,
                 length: piece.length - split_length,
             },
         );
@@ -286,7 +336,7 @@ impl PieceTable {
         }
     }
 
-    fn total_length(&self) -> usize {
+    fn _total_length(&self) -> usize {
         self.pieces.iter().map(|x| x.length).sum()
     }
 
@@ -404,35 +454,6 @@ impl PieceTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_split_table_without_append() {
-        let initial_buffer = "Buenos dias, el clima se ve muy bien";
-        let mut pt = PieceTable::from_str(initial_buffer);
-
-        let i = pt.split_read_only_table(11);
-
-        assert_eq!(1, i);
-        assert_eq!(2, pt.pieces.len());
-        assert_eq!(11, pt.pieces[1].start);
-    }
-
-    #[test]
-    fn test_insert_middle() {
-        let initial_buffer = "Buenos dias, el clima se ve muy bien";
-        let mut pt = PieceTable::from_str(initial_buffer);
-
-        pt.insert(" Matias", 11);
-
-        assert_eq!(" Matias", pt.append_buf);
-        assert_eq!(3, pt.pieces.len());
-        assert_eq!(BufChoice::AppendOnly, pt.pieces[1].buffer);
-
-        assert_eq!(
-            "Buenos dias Matias, el clima se ve muy bien",
-            pt.display_result().unwrap()
-        );
-    }
 
     #[test]
     fn test_delete_func() {
