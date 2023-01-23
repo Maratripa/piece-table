@@ -2,67 +2,88 @@
 //!
 //! A piece table data structure implementation.
 
-use std::{
-    fs::{self, File},
-    io::{self, BufReader, Read, Write},
-    path::{Path, PathBuf},
-};
-
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum BufChoice {
-    ReadOnly,
-    AppendOnly,
-}
-
-#[derive(Debug)]
-enum ReadBuffer {
-    Str(String),
-    File(PathBuf),
+enum Buffer {
+    Read,
+    Add,
 }
 
 #[derive(Debug)]
 struct Piece {
-    buffer: BufChoice,
+    buffer: Buffer,
     start: usize,
     length: usize,
 }
 
 #[derive(Debug)]
-pub struct PieceTable {
-    read_buf: ReadBuffer,
-    append_buf: String,
+pub struct PieceTable<'a, T: 'a + Clone> {
+    read_buf: &'a [T],
+    add_buf: Vec<T>,
     pieces: Vec<Piece>,
 }
 
-impl PieceTable {
-    /// Create new PieceTable using a file as read_buffer.
+pub struct Iter<'a, T: 'a + Clone> {
+    table: &'a PieceTable<'a, T>,
+    piece_idx: usize,
+    iter: std::slice::Iter<'a, T>,
+}
+
+impl<'a, T: 'a + Clone> PieceTable<'a, T> {
+    /// Create a new, empty PieceTable.
     ///
     /// # Examples
     /// ```
     /// use piecetable::PieceTable;
-    /// use std::path::Path;
     ///
-    /// let mut piecetable = PieceTable::from_file(Path::new("test.txt")).unwrap();
+    /// let piece_table = PieceTable::<char>::new();
     /// ```
-    ///
-    /// # Errors
-    ///
-    /// Possible error when opening file.
-    ///
-    /// Possible error when reading metadata of file.
-    pub fn from_file(path: &Path) -> Result<PieceTable, io::Error> {
-        let file = File::open(path)?;
-        let file_size = file.metadata()?.len();
+    pub fn new() -> PieceTable<'a, T> {
+        PieceTable {
+            read_buf: &[],
+            add_buf: vec![],
+            pieces: vec![],
+        }
+    }
 
-        Ok(PieceTable {
-            read_buf: ReadBuffer::File(PathBuf::from(path)),
-            append_buf: String::new(),
-            pieces: vec![Piece {
-                buffer: BufChoice::ReadOnly,
+    /// Create a new PieceTable with capacity for append buffer and piece buffer
+    /// for insertion without reallocation.
+    ///
+    /// # Examples
+    /// ```
+    /// use piecetable::PieceTable;
+    ///
+    /// let piece_table = PieceTable::<char>::with_capacity(10, 10);
+    /// ```
+    pub fn with_capacity(buffer_capacity: usize, piece_capacity: usize) -> PieceTable<'a, T> {
+        PieceTable {
+            read_buf: &[],
+            add_buf: Vec::with_capacity(buffer_capacity),
+            pieces: Vec::with_capacity(piece_capacity),
+        }
+    }
+
+    /// Set a source as the read only buffer for the piece table.
+    ///
+    /// # Examples
+    /// ```
+    /// use piecetable::PieceTable;
+    ///
+    /// let mut piece_table = PieceTable::new();
+    ///
+    /// let source = "Buenos dias".as_bytes();
+    ///
+    /// piece_table.src(source);
+    /// ```
+    pub fn src(&mut self, src: &'a [T]) {
+        if src.len() > 0 {
+            self.pieces.push(Piece {
                 start: 0,
-                length: file_size as usize,
-            }],
-        })
+                length: src.len(),
+                buffer: Buffer::Read,
+            })
+        }
+
+        self.read_buf = src;
     }
 
     /// Create new PieceTable using a base string as read_buffer.
@@ -71,65 +92,33 @@ impl PieceTable {
     /// ```
     /// use piecetable::PieceTable;
     ///
-    /// let mut piecetable = PieceTable::from_str("Buenos dias");
+    /// let mut piecetable = PieceTable::<u8>::from_str("Buenos dias");
     /// ```
-    pub fn from_str(buf: &str) -> PieceTable {
-        let buf = buf.to_string();
+    pub fn from_str(buf: &str) -> PieceTable<u8> {
         let buf_size = buf.len();
 
         PieceTable {
-            read_buf: ReadBuffer::Str(buf),
-            append_buf: String::new(),
+            read_buf: buf.as_bytes(),
+            add_buf: vec![],
             pieces: vec![Piece {
-                buffer: BufChoice::ReadOnly,
+                buffer: Buffer::Read,
                 start: 0,
                 length: buf_size,
             }],
         }
     }
 
-    /// Join pieces reading from read_buffer and append_buffer.
-    ///
-    /// # Examples
-    /// ```
-    /// use piecetable::PieceTable;
-    ///
-    /// let piecetable = PieceTable::from_str("Buenos dias");
-    ///
-    /// println!("{}", piecetable.display_result().unwrap());
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Posible error when reading file to string.
-    pub fn display_result(&self) -> Result<String, io::Error> {
-        match &self.read_buf {
-            ReadBuffer::Str(buf) => Ok(self.connect_pieces(buf)),
-            ReadBuffer::File(path) => {
-                let read_buf = fs::read_to_string(path)?;
-                Ok(self.connect_pieces(&read_buf))
-            }
-        }
+    /// Reserve capacity for at least 'additional' more elements in the append buffer.
+    pub fn reserve_buffer(&mut self, additional: usize) {
+        self.add_buf.reserve(additional);
     }
 
-    fn connect_pieces(&self, read_buf: &String) -> String {
-        let mut result = String::new();
-
-        for piece in self.pieces.iter() {
-            let range = piece.start..piece.start + piece.length;
-
-            match piece.buffer {
-                BufChoice::ReadOnly => result.push_str(&read_buf[range]),
-                BufChoice::AppendOnly => result.push_str(&self.append_buf[range]),
-            }
-        }
-
-        result
+    /// Reserve capacity for at least 'additional' more elements in the piece buffer.
+    pub fn reserve_piece(&mut self, additional: usize) {
+        self.pieces.reserve(additional);
     }
 
-    /// Insert string slice in piece table.
-    ///
-    /// split_index is the global index for the starting character or the new string slice.
+    /// Insert 'element' to piece table at position 'index'.
     ///
     /// # Examples
     /// ```
@@ -138,25 +127,23 @@ impl PieceTable {
     /// let buffer = "Buenos dias, que buen clima hoy";
     /// //                       |
     /// //                      11
-    /// let mut piece_table = PieceTable::from_str(buffer);
+    /// let mut piece_table = PieceTable::<u8>::from_str(buffer);
     ///
-    /// piece_table.insert(" Matias", 11);
-    ///
-    /// assert_eq!("Buenos dias Matias, que buen clima hoy", piece_table.display_result().unwrap());
+    /// piece_table.insert(b'M', 11);
     /// ```
-    pub fn insert(&mut self, buf: &str, index: usize) {
-        let append_buf_len = self.append_buf.len();
-        let length = buf.len();
+    pub fn insert(&mut self, element: T, index: usize) {
+        let append_buf_len = self.add_buf.len();
         let idx = self.find_piece_at_position(index);
         let is_border = self.position_is_at_border(index);
+
+        self.add_buf.push(element);
 
         // check if insert is at the end of an append piece and is an extension of last added to append buffer
         if is_border && idx != 0 {
             let prev_piece = &self.pieces[idx - 1];
-            if prev_piece.buffer == BufChoice::AppendOnly {
+            if prev_piece.buffer == Buffer::Add {
                 if prev_piece.start + prev_piece.length == append_buf_len {
-                    self.append_buf.push_str(buf);
-                    self.pieces[idx - 1].length += length;
+                    self.pieces[idx - 1].length += 1;
                     return;
                 }
             }
@@ -167,12 +154,11 @@ impl PieceTable {
             self.pieces.insert(
                 idx,
                 Piece {
-                    buffer: BufChoice::AppendOnly,
+                    buffer: Buffer::Add,
                     start: append_buf_len,
-                    length,
+                    length: 1,
                 },
             );
-            self.append_buf.push_str(buf);
             return;
         }
 
@@ -183,19 +169,34 @@ impl PieceTable {
             counter += self.pieces[i].length;
         }
         let split_index = index - counter;
+
         // divide pieces
         self.divide_piece(idx, split_index);
         self.pieces.insert(
             idx + 1,
             Piece {
-                buffer: BufChoice::AppendOnly,
+                buffer: Buffer::Add,
                 start: append_buf_len,
-                length,
+                length: 1,
             },
         );
+    }
 
-        // Add characters to append buffer
-        self.append_buf.push_str(buf);
+    /// Insert array of elements to piece table at position 'index'.
+    ///
+    /// # Examples
+    /// ```
+    /// use piecetable::PieceTable;
+    ///
+    /// let mut piece_table = PieceTable::new();
+    /// piece_table.src(b"Buenos dias");
+    ///
+    /// piece_table.insert_slice(b" Matias", 11);
+    /// ```
+    pub fn insert_slice(&mut self, slice: &[T], index: usize) {
+        for (i, c) in slice.iter().enumerate() {
+            self.insert(c.clone(), index + i);
+        }
     }
 
     fn find_piece_at_position(&self, position: usize) -> usize {
@@ -232,7 +233,7 @@ impl PieceTable {
         false
     }
 
-    /// Delete character at position _char_index_
+    /// Delete character at position 'char_index'.
     ///
     /// # Examples
     ///
@@ -242,14 +243,12 @@ impl PieceTable {
     /// let buffer = "Mucho gus8to";
     /// //                     |
     /// //                     9
-    /// let mut piece_table = PieceTable::from_str(buffer);
+    /// let mut piece_table = PieceTable::<u8>::from_str(buffer);
     ///
     /// piece_table.delete_char(9);
-    ///
-    /// assert_eq!("Mucho gusto", piece_table.display_result().unwrap());
     /// ```
-    pub fn delete_char(&mut self, char_index: usize) {
-        let (piece_index, index_in_piece) = self.split_piece_index_and_lenght(char_index);
+    pub fn delete(&mut self, index: usize) {
+        let (piece_index, index_in_piece) = self.split_piece_index_and_lenght(index);
 
         let mut piece = &mut self.pieces[piece_index];
 
@@ -336,155 +335,49 @@ impl PieceTable {
         }
     }
 
-    fn _total_length(&self) -> usize {
+    /// Get total length of piece table.
+    pub fn len(&self) -> usize {
         self.pieces.iter().map(|x| x.length).sum()
     }
 
-    /// Save piecetable to file
-    ///
-    /// # Expamples
-    /// ```
-    /// use piecetable::PieceTable;
-    /// use std::{
-    ///     path::Path,
-    ///     fs,
-    ///     io::Write
-    /// };
-    ///
-    /// {
-    ///     let mut file = fs::File::create("test.txt").unwrap();
-    ///     file.write_all(b"Buenos dias").unwrap();
-    /// }
-    ///
-    /// let mut piecetable = PieceTable::from_file(Path::new("test.txt")).unwrap();
-    /// piecetable.insert(" Matias", 11);
-    ///
-    /// let _file_length: usize = piecetable.save_file().unwrap();
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Returns error if piecetable does not contain a filepath to save the pieces to.
-    pub fn save_file(&mut self) -> Result<usize, &str> {
-        if let ReadBuffer::File(path) = &self.read_buf {
-            let input = match File::open(path) {
-                Ok(x) => x,
-                Err(_e) => return Err("Could not open file"),
-            };
-
-            let mut reader = BufReader::new(input);
-
-            let mut read_buffer = String::new();
-
-            let _len = match reader.read_to_string(&mut read_buffer) {
-                Ok(x) => x,
-                Err(_e) => return Err("Could not read file"),
-            };
-
-            match self.save(path, &read_buffer) {
-                Ok(len) => {
-                    self.pieces = vec![Piece {
-                        buffer: BufChoice::ReadOnly,
-                        start: 0,
-                        length: len,
-                    }];
-                    Ok(len)
-                }
-                Err(_e) => Err("Error saving file"),
-            }
-        } else {
-            Err("PieceTable does not contain a filepath. Run PieceTable::save_to_file(path) to save to a file.")
+    fn get_buffer(&'a self, piece: &Piece) -> &'a [T] {
+        match piece.buffer {
+            Buffer::Read => self.read_buf,
+            Buffer::Add => &self.add_buf,
         }
     }
 
-    /// Save piecetable to new filepath and modify filename of piecetable if it exists.
-    ///
-    /// # Examples
-    /// ```
-    /// use piecetable::PieceTable;
-    /// use std::path::Path;
-    ///
-    /// let mut piecetable = PieceTable::from_str("Buenos dias");
-    /// let _new_file_length = piecetable.save_to_file(Path::new("test.txt")).unwrap();
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Error creating file
-    /// Error opening file
-    /// Error reading file
-    /// Error reading metadata
-    pub fn save_to_file(&mut self, path: &Path) -> Result<usize, io::Error> {
-        let mut _len = 0;
-        match &self.read_buf {
-            ReadBuffer::Str(buf) => {
-                _len = self.save(path, buf)?;
-            }
-            ReadBuffer::File(saved_path) => {
-                let input = File::open(saved_path)?;
-
-                let mut reader = BufReader::new(input);
-
-                let mut read_buffer = String::new();
-
-                let _read_len = reader.read_to_string(&mut read_buffer)?;
-
-                _len = self.save(path, &read_buffer)?;
-            }
+    pub fn iter(&'a self) -> Iter<'a, T> {
+        let piece = &self.pieces[0];
+        let buf = self.get_buffer(piece);
+        let iter = buf[piece.start .. piece.start + piece.length].iter();
+        Iter {
+            table: &self,
+            piece_idx: 0,
+            iter,
         }
-
-        self.read_buf = ReadBuffer::File(PathBuf::from(path));
-        self.pieces = vec![Piece {
-            buffer: BufChoice::ReadOnly,
-            start: 0,
-            length: _len,
-        }];
-
-        Ok(_len)
-    }
-
-    fn save(&self, path: &Path, read_buffer: &String) -> Result<usize, io::Error> {
-        let mut file = File::create(path)?;
-        write!(file, "{}", self.connect_pieces(&read_buffer))?;
-
-        Ok(file.metadata()?.len() as usize)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+impl<'a, T: 'a + Clone> Iterator for Iter<'a, T> {
+    type Item = &'a T;
 
-    #[test]
-    fn test_delete_func() {
-        let initial_buffer = "Buenos dias, el clima se ve muy bien";
-        let mut pt = PieceTable::from_str(initial_buffer);
-
-        pt.delete_char(11);
-
-        assert_eq!(2, pt.pieces.len());
-        assert_eq!(
-            "Buenos dias el clima se ve muy bien",
-            pt.display_result().unwrap()
-        );
-    }
-
-    #[test]
-    fn test_file() {
-        {
-            let mut file = fs::File::create("test.txt").unwrap();
-            file.write_all(b"Buenos dias").unwrap();
-        }
-        {
-            let mut pt = PieceTable::from_file(Path::new("test.txt")).unwrap();
-
-            pt.insert(" Matias", 11);
-
-            pt.save_file().unwrap();
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(next) = self.iter.next() {
+            return Some(next)
         }
 
-        let contents = fs::read_to_string("test.txt").unwrap();
+        self.piece_idx += 1;
 
-        assert_eq!("Buenos dias Matias", contents);
+        if self.piece_idx >= self.table.pieces.len() {
+            return None
+        }
+
+        let piece = &self.table.pieces[self.piece_idx];
+        let buf = self.table.get_buffer(piece);
+
+        self.iter = buf[piece.start .. piece.start + piece.length].iter();
+
+        self.next()
     }
 }
